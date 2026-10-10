@@ -15,6 +15,13 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/tickets', ticketsRouter);
 
+app.use((_req, res) => {
+    res.status(404).json({
+        status: 'Error',
+        message: 'Not found',
+    });
+});
+
 const PORT = Number(process.env.PORT || 3000);
 
 async function bootstrap(): Promise<void> {
