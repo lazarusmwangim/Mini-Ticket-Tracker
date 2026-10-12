@@ -1,8 +1,7 @@
-
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap");
 
 :root {
-  font-family: 'DM Sans', sans-serif;
+  font-family: "DM Sans", sans-serif;
   color: #172033;
   background: #f7f8fc;
   font-synthesis: none;
@@ -35,7 +34,7 @@ button,
 input,
 select,
 textarea {
-  font-family: 'DM Sans', sans-serif;
+  font-family: "DM Sans", sans-serif;
 }
 
 button,
@@ -93,7 +92,7 @@ textarea:focus-visible {
   padding: 0 8px;
   margin-bottom: 43px;
   color: #162238;
-  font-family: 'Manrope', sans-serif;
+  font-family: "Manrope", sans-serif;
   font-size: 20px;
   font-weight: 800;
   letter-spacing: -0.7px;
@@ -143,7 +142,9 @@ textarea:focus-visible {
   color: #6f788b;
   text-align: left;
   font-weight: 500;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .nav-item:hover {
@@ -309,7 +310,7 @@ textarea:focus-visible {
 .page-title-row h1 {
   margin: 0;
   color: #172033;
-  font-family: 'Manrope', sans-serif;
+  font-family: "Manrope", sans-serif;
   font-size: 29px;
   font-weight: 800;
   letter-spacing: -1.1px;
@@ -335,7 +336,15 @@ textarea:focus-visible {
   font-size: 12px;
   font-weight: 700;
   box-shadow: 0 2px 4px rgb(5 150 105 / 10%);
-  transition: background 0.15s, transform 0.15s;
+  transition:
+    background 0.15s,
+    transform 0.15s;
+}
+
+.create-ticket-title {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .create-button:hover:not(:disabled) {
@@ -435,7 +444,7 @@ textarea:focus-visible {
   display: block;
   margin-top: 12px;
   color: #1b263b;
-  font-family: 'Manrope', sans-serif;
+  font-family: "Manrope", sans-serif;
   font-size: 30px;
   font-weight: 800;
   letter-spacing: -1px;
@@ -468,7 +477,7 @@ textarea:focus-visible {
 .table-panel-heading h2 {
   margin: 0;
   color: #1b263b;
-  font-family: 'Manrope', sans-serif;
+  font-family: "Manrope", sans-serif;
   font-size: 16px;
   font-weight: 800;
   letter-spacing: -0.3px;
@@ -818,6 +827,11 @@ textarea:focus-visible {
   box-shadow: 0 24px 80px rgb(17 24 39 / 18%);
 }
 
+.create-modal-title {
+  
+color: var(--green);
+}
+
 .modal-heading {
   display: flex;
   align-items: flex-start;
@@ -829,7 +843,7 @@ textarea:focus-visible {
 
 .modal-heading h2 {
   margin: 0;
-  font-family: 'Manrope', sans-serif;
+  font-family: "Manrope", sans-serif;
   font-size: 19px;
   font-weight: 800;
 }

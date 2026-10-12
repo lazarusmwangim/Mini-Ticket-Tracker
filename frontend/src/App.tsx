@@ -625,7 +625,9 @@ function App() {
           >
             <div className="modal-heading">
               <div>
-                <h2 id="create-modal-title">Create ticket</h2>
+                <h2 id="create-modal-title" className="create-ticket-title">
+                  Create ticket
+                </h2>
                 <p>Enter the details for the new support request.</p>
               </div>
 
