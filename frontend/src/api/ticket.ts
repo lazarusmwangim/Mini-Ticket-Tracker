@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { CreateTicketInput, GetTicketsParams, PaginatedTickets, Ticket, TicketStats, TicketStatus } from "../types/ticket";
+import type { CreateTicketInput, GetTicketsParams, PaginatedTickets, Ticket, TicketPriority, TicketStats, TicketStatus } from "../types/ticket";
 
 const api = axios.create({
     baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api',
@@ -35,6 +35,14 @@ export async function createTicket(input: CreateTicketInput): Promise<Ticket> {
 export async function updateTicketStatus(id: number, status: TicketStatus): Promise<Ticket> {
     const { data } = await api.patch<Ticket>(`/tickets/${id}`, {
         status,
+    });
+
+    return data;
+}
+
+export async function updateTicketPriority(id: number, priority: TicketPriority): Promise<Ticket> {
+    const { data } = await api.patch<Ticket>(`/tickets/${id}`, {
+        priority,
     });
 
     return data;

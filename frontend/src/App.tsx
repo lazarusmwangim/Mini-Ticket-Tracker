@@ -2,16 +2,26 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import {
   Activity,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   CirclePlus,
+  ClipboardList,
+  LayoutDashboard,
+  LogOut,
+  Menu,
   RefreshCw,
   Search,
+  Settings,
   Ticket as TicketIcon,
+  X,
 } from "lucide-react";
 
 import {
   createTicket,
   getTickets,
   getTicketStats,
+  updateTicketPriority,
   updateTicketStatus,
 } from "./api/ticket";
 
@@ -25,13 +35,13 @@ import type {
 
 import "./App.css";
 
+const PAGE_SIZE = 10;
+
 const EMPTY_STATS: TicketStats = {
   open: 0,
   in_progress: 0,
   closed: 0,
 };
-
-const PAGE_SIZE = 10;
 
 const STATUS_LABELS: Record<TicketStatus, string> = {
   open: "Open",
@@ -45,17 +55,17 @@ const PRIORITY_LABELS: Record<TicketPriority, string> = {
   high: "High",
 };
 
-function formatDate(date: string): string {
-  const parsedDate = new Date(date);
+function formatDate(value: string): string {
+  const date = new Date(value);
 
-  if (Number.isNaN(parsedDate.getTime())) {
-    return "Unknown date";
+  if (Number.isNaN(date.getTime())) {
+    return "—";
   }
 
-  return parsedDate.toLocaleDateString(undefined, {
-    year: "numeric",
+  return date.toLocaleDateString(undefined, {
+    day: "2-digit",
     month: "short",
-    day: "numeric",
+    year: "numeric",
   });
 }
 
@@ -68,15 +78,20 @@ function App() {
   const [totalTickets, setTotalTickets] = useState(0);
 
   const [statusFilter, setStatusFilter] = useState<TicketStatus | "">("");
+  const [priorityFilter, setPriorityFilter] = useState<TicketPriority | "">("");
   const [search, setSearch] = useState("");
+
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<TicketPriority>("medium");
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -95,11 +110,11 @@ function App() {
       ]);
 
       setTickets(ticketResponse.data);
-      setTotalPages(Math.max(1, ticketResponse.totalPages));
       setTotalTickets(ticketResponse.total);
+      setTotalPages(Math.max(1, ticketResponse.totalPages));
       setStats(statsResponse);
     } catch {
-      setError("Unable to load tickets. Please try again.");
+      setError("Unable to load tickets. Check that the backend is running.");
     } finally {
       setLoading(false);
     }
@@ -112,18 +127,19 @@ function App() {
   const visibleTickets = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    if (!query) {
-      return tickets;
-    }
-
     return tickets.filter((ticket) => {
-      return (
+      const matchesSearch =
+        !query ||
         ticket.title.toLowerCase().includes(query) ||
         (ticket.description ?? "").toLowerCase().includes(query) ||
-        String(ticket.id).includes(query)
-      );
+        String(ticket.id).includes(query);
+
+      const matchesPriority =
+        !priorityFilter || ticket.priority === priorityFilter;
+
+      return matchesSearch && matchesPriority;
     });
-  }, [tickets, search]);
+  }, [tickets, search, priorityFilter]);
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -149,20 +165,21 @@ function App() {
       setTitle("");
       setDescription("");
       setPriority("medium");
-      setPage(1);
-      setStatusFilter("");
+      setShowCreateForm(false);
       setSearch("");
+      setPriorityFilter("");
+      setStatusFilter("");
+      setPage(1);
       setSuccess("Ticket created successfully.");
 
-      // Refresh explicitly because the page/filter may not have changed.
       const [ticketResponse, statsResponse] = await Promise.all([
         getTickets({ page: 1, limit: PAGE_SIZE }),
         getTicketStats(),
       ]);
 
       setTickets(ticketResponse.data);
-      setTotalPages(Math.max(1, ticketResponse.totalPages));
       setTotalTickets(ticketResponse.total);
+      setTotalPages(Math.max(1, ticketResponse.totalPages));
       setStats(statsResponse);
     } catch {
       setError("Unable to create the ticket. Please try again.");
@@ -178,325 +195,577 @@ function App() {
 
     try {
       await updateTicketStatus(ticketId, status);
-      setSuccess("Ticket status updated successfully.");
+      setSuccess("Ticket status updated.");
       await loadData();
     } catch {
-      setError("Unable to update the ticket status.");
+      setError("Unable to update ticket status.");
     } finally {
       setUpdatingId(null);
     }
+  };
+
+  const handlePriorityChange = async (
+    ticketId: number,
+    priority: TicketPriority,
+  ) => {
+    setUpdatingId(ticketId);
+    setError("");
+    setSuccess("");
+
+    try {
+      await updateTicketPriority(ticketId, priority);
+      setSuccess("Ticket priority updated.");
+      await loadData();
+    } catch {
+      setError("Unable to update ticket priority.");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleStatusFilter = (value: string) => {
+    setStatusFilter(value as TicketStatus | "");
+    setPage(1);
   };
 
   const handleRefresh = () => {
     void loadData();
   };
 
-  const handleStatusFilterChange = (value: string) => {
-    setStatusFilter(value as TicketStatus | "");
-    setPage(1);
-  };
-
   const totalCount = stats.open + stats.in_progress + stats.closed;
+  const firstItem = totalTickets === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const lastItem = Math.min(page * PAGE_SIZE, totalTickets);
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <div className="brand-icon">
-            <TicketIcon size={22} />
+    <div className="dashboard">
+      <aside className={`sidebar ${mobileMenuOpen ? "sidebar-open" : ""}`}>
+        <div className="sidebar-brand">
+          <div className="brand-mark">
+            <TicketIcon size={23} />
           </div>
+          <span>TrackDesk</span>
 
-          <div>
-            <h1>TrackDesk</h1>
-            <p>Simple ticket management</p>
-          </div>
+          <button
+            className="sidebar-close"
+            type="button"
+            aria-label="Close navigation"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <X size={19} />
+          </button>
         </div>
 
+        <div className="sidebar-section-label">WORKSPACE</div>
+
+        <nav className="sidebar-nav">
+          <button
+            className="nav-item"
+            type="button"
+            onClick={() => {
+              setStatusFilter("");
+              setPage(1);
+              setMobileMenuOpen(false);
+            }}
+          >
+            <LayoutDashboard size={19} />
+            <span>Overview</span>
+          </button>
+
+          <button
+            className="nav-item active"
+            type="button"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <ClipboardList size={19} />
+            <span>Tickets</span>
+            <span className="nav-count">{totalTickets}</span>
+          </button>
+
+          <button
+            className="nav-item"
+            type="button"
+            onClick={() => {
+              setStatusFilter("open");
+              setPage(1);
+              setMobileMenuOpen(false);
+            }}
+          >
+            <Activity size={19} />
+            <span>Open tickets</span>
+          </button>
+
+          <button
+            className="nav-item"
+            type="button"
+            onClick={() => {
+              setStatusFilter("closed");
+              setPage(1);
+              setMobileMenuOpen(false);
+            }}
+          >
+            <CheckCircle2 size={19} />
+            <span>Resolved</span>
+          </button>
+        </nav>
+
+        <div className="sidebar-bottom">
+          <div className="sidebar-section-label">PREFERENCES</div>
+
+          <button className="nav-item" type="button">
+            <Settings size={19} />
+            <span>Settings</span>
+          </button>
+
+          <div className="sidebar-profile">
+            <div className="profile-avatar">TD</div>
+            <div className="profile-info">
+              <strong>Support Team</strong>
+              <span>Ticket workspace</span>
+            </div>
+            <LogOut size={17} className="profile-logout" />
+          </div>
+        </div>
+      </aside>
+
+      {mobileMenuOpen && (
         <button
-          className="refresh-button"
+          className="sidebar-backdrop"
           type="button"
-          onClick={handleRefresh}
-          disabled={loading}
-        >
-          <RefreshCw size={16} className={loading ? "spin" : ""} />
-          Refresh
-        </button>
-      </header>
-
-      <section className="page-heading">
-        <div>
-          <p className="eyebrow">WORKSPACE</p>
-          <h2>Ticket dashboard</h2>
-          <p className="page-description">
-            Create, track, and manage support tickets in one place.
-          </p>
-        </div>
-
-        <div className="heading-icon">
-          <Activity size={26} />
-        </div>
-      </section>
-
-      {error && (
-        <div className="alert alert-error" role="alert">
-          {error}
-        </div>
+          aria-label="Close navigation"
+          onClick={() => setMobileMenuOpen(false)}
+        />
       )}
 
-      {success && (
-        <div className="alert alert-success" role="status">
-          {success}
-        </div>
-      )}
+      <main className="dashboard-main">
+        <header className="dashboard-header">
+          <button
+            className="mobile-menu-button"
+            type="button"
+            aria-label="Open navigation"
+            onClick={() => setMobileMenuOpen(true)}
+          >
+            <Menu size={21} />
+          </button>
 
-      <section className="stats-grid" aria-label="Ticket statistics">
-        <article className="stat-card">
-          <div className="stat-icon stat-open">
-            <TicketIcon size={20} />
+          <div className="breadcrumb">
+            Workspace <span>/</span> <strong>Tickets</strong>
           </div>
-          <p>Open tickets</p>
-          <strong>{stats.open}</strong>
-        </article>
 
-        <article className="stat-card">
-          <div className="stat-icon stat-progress">
-            <RefreshCw size={20} />
+          <div className="header-actions">
+            <span className="system-status">
+              <span className="status-dot" />
+              Ticket system
+            </span>
+
+            <button
+              className="header-avatar"
+              type="button"
+              aria-label="Support team profile"
+            >
+              TD
+            </button>
           </div>
-          <p>In progress</p>
-          <strong>{stats.in_progress}</strong>
-        </article>
+        </header>
 
-        <article className="stat-card">
-          <div className="stat-icon stat-closed">
-            <Activity size={20} />
-          </div>
-          <p>Closed tickets</p>
-          <strong>{stats.closed}</strong>
-        </article>
-
-        <article className="stat-card">
-          <div className="stat-icon stat-total">
-            <TicketIcon size={20} />
-          </div>
-          <p>Total tickets</p>
-          <strong>{totalCount}</strong>
-        </article>
-      </section>
-
-      <section className="content-grid">
-        <section className="panel create-panel">
-          <div className="panel-heading">
+        <div className="dashboard-content">
+          <section className="page-title-row">
             <div>
-              <h3>Create a ticket</h3>
-              <p>Add a new item to your ticket queue.</p>
-            </div>
-
-            <CirclePlus size={22} />
-          </div>
-
-          <form onSubmit={handleCreate} className="ticket-form">
-            <div className="form-group">
-              <label htmlFor="ticket-title">Title</label>
-              <input
-                id="ticket-title"
-                type="text"
-                placeholder="e.g. Unable to log in"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                maxLength={255}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="ticket-description">
-                Description <span className="optional">(optional)</span>
-              </label>
-              <textarea
-                id="ticket-description"
-                placeholder="Describe the issue..."
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                rows={4}
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="ticket-priority">Priority</label>
-              <select
-                id="ticket-priority"
-                value={priority}
-                onChange={(event) =>
-                  setPriority(event.target.value as TicketPriority)
-                }
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
+              <p className="eyebrow">SUPPORT WORKSPACE</p>
+              <h1>Tickets</h1>
+              <p className="page-subtitle">
+                Manage, prioritize, and track support requests.
+              </p>
             </div>
 
             <button
-              className="primary-button"
-              type="submit"
-              disabled={creating}
+              className="create-button"
+              type="button"
+              onClick={() => {
+                setError("");
+                setSuccess("");
+                setShowCreateForm(true);
+              }}
             >
-              <CirclePlus size={17} />
-              {creating ? "Creating..." : "Create ticket"}
+              <CirclePlus size={18} />
+              Create ticket
             </button>
-          </form>
-        </section>
+          </section>
 
-        <section className="panel tickets-panel">
-          <div className="panel-heading">
-            <div>
-              <h3>All tickets</h3>
-              <p>
-                {totalTickets} {totalTickets === 1 ? "ticket" : "tickets"} in
-                your current filter.
-              </p>
-            </div>
-
-            <span className="ticket-count">{totalTickets}</span>
-          </div>
-
-          <div className="ticket-toolbar">
-            <div className="search-box">
-              <Search size={17} />
-              <input
-                type="search"
-                placeholder="Search this page..."
-                aria-label="Search tickets on this page"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </div>
-
-            <select
-              aria-label="Filter tickets by status"
-              value={statusFilter}
-              onChange={(event) => handleStatusFilterChange(event.target.value)}
-            >
-              <option value="">All statuses</option>
-              <option value="open">Open</option>
-              <option value="in_progress">In progress</option>
-              <option value="closed">Closed</option>
-            </select>
-          </div>
-
-          {loading ? (
-            <div className="empty-state">
-              <RefreshCw size={24} className="spin" />
-              <p>Loading tickets...</p>
-            </div>
-          ) : visibleTickets.length === 0 ? (
-            <div className="empty-state">
-              <TicketIcon size={30} />
-              <h4>No tickets found</h4>
-              <p>
-                {search
-                  ? "Try a different search term."
-                  : "Create a ticket to get started."}
-              </p>
-            </div>
-          ) : (
-            <div className="ticket-list">
-              {visibleTickets.map((ticket) => (
-                <article className="ticket-item" key={ticket.id}>
-                  <div className="ticket-main">
-                    <div className="ticket-title-row">
-                      <h4>{ticket.title}</h4>
-                      <span className="ticket-id">#{ticket.id}</span>
-                    </div>
-
-                    {ticket.description && (
-                      <p className="ticket-description">{ticket.description}</p>
-                    )}
-
-                    <div className="ticket-meta">
-                      <span
-                        className={`priority-badge priority-${ticket.priority}`}
-                      >
-                        {PRIORITY_LABELS[ticket.priority]}
-                      </span>
-
-                      <span className="ticket-date">
-                        Created {formatDate(ticket.created_at)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="ticket-status-control">
-                    <label
-                      className="visually-hidden"
-                      htmlFor={`status-${ticket.id}`}
-                    >
-                      Status for ticket {ticket.id}
-                    </label>
-
-                    <select
-                      id={`status-${ticket.id}`}
-                      className={`status-select status-${ticket.status}`}
-                      value={ticket.status}
-                      disabled={updatingId === ticket.id}
-                      onChange={(event) =>
-                        void handleStatusChange(
-                          ticket.id,
-                          event.target.value as TicketStatus,
-                        )
-                      }
-                    >
-                      {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-
-                    {updatingId === ticket.id && (
-                      <span className="updating-label">Saving...</span>
-                    )}
-                  </div>
-                </article>
-              ))}
+          {error && (
+            <div className="dashboard-alert error-alert" role="alert">
+              {error}
+              <button
+                type="button"
+                aria-label="Dismiss error"
+                onClick={() => setError("")}
+              >
+                <X size={16} />
+              </button>
             </div>
           )}
 
-          <div className="pagination">
-            <span>
-              Showing {visibleTickets.length} on this page of {totalTickets}{" "}
-              tickets
-            </span>
-
-            <div className="pagination-actions">
+          {success && (
+            <div className="dashboard-alert success-alert" role="status">
+              <CheckCircle2 size={17} />
+              {success}
               <button
                 type="button"
-                disabled={page <= 1 || loading}
-                onClick={() => setPage((current) => current - 1)}
+                aria-label="Dismiss notification"
+                onClick={() => setSuccess("")}
               >
-                Previous
-              </button>
-
-              <span>
-                Page {page} of {totalPages}
-              </span>
-
-              <button
-                type="button"
-                disabled={page >= totalPages || loading}
-                onClick={() => setPage((current) => current + 1)}
-              >
-                Next
+                <X size={16} />
               </button>
             </div>
-          </div>
-        </section>
-      </section>
+          )}
 
-      <footer className="app-footer">
-        <p>TrackDesk · Ticket management made simple</p>
-      </footer>
-    </main>
+          <section className="metrics-grid">
+            <article className="metric-card">
+              <div className="metric-top">
+                <span>Total tickets</span>
+                <div className="metric-icon total-icon">
+                  <ClipboardList size={19} />
+                </div>
+              </div>
+              <strong>{totalCount}</strong>
+              <span className="metric-footnote">Across all statuses</span>
+            </article>
+
+            <article className="metric-card">
+              <div className="metric-top">
+                <span>Open</span>
+                <div className="metric-icon open-icon">
+                  <TicketIcon size={19} />
+                </div>
+              </div>
+              <strong>{stats.open}</strong>
+              <span className="metric-footnote">Awaiting resolution</span>
+            </article>
+
+            <article className="metric-card">
+              <div className="metric-top">
+                <span>In progress</span>
+                <div className="metric-icon progress-icon">
+                  <RefreshCw size={19} />
+                </div>
+              </div>
+              <strong>{stats.in_progress}</strong>
+              <span className="metric-footnote">Currently being handled</span>
+            </article>
+
+            <article className="metric-card">
+              <div className="metric-top">
+                <span>Closed</span>
+                <div className="metric-icon closed-icon">
+                  <CheckCircle2 size={19} />
+                </div>
+              </div>
+              <strong>{stats.closed}</strong>
+              <span className="metric-footnote">Resolved tickets</span>
+            </article>
+          </section>
+
+          <section className="table-panel">
+            <div className="table-panel-heading">
+              <div>
+                <h2>All tickets</h2>
+                <p>View and manage your support queue.</p>
+              </div>
+
+              <button
+                className="icon-button"
+                type="button"
+                onClick={handleRefresh}
+                disabled={loading}
+                aria-label="Refresh tickets"
+                title="Refresh tickets"
+              >
+                <RefreshCw size={17} className={loading ? "spin" : ""} />
+              </button>
+            </div>
+
+            <div className="table-toolbar">
+              <div className="table-search">
+                <Search size={18} />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search by title, description or ID..."
+                  aria-label="Search tickets on current page"
+                />
+              </div>
+
+              <div className="table-filters">
+                <select
+                  value={statusFilter}
+                  onChange={(event) => handleStatusFilter(event.target.value)}
+                  aria-label="Filter by status"
+                >
+                  <option value="">All statuses</option>
+                  <option value="open">Open</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="closed">Closed</option>
+                </select>
+
+                <select
+                  value={priorityFilter}
+                  onChange={(event) =>
+                    setPriorityFilter(event.target.value as TicketPriority | "")
+                  }
+                  aria-label="Filter by priority"
+                >
+                  <option value="">All priorities</option>
+                  <option value="high">High priority</option>
+                  <option value="medium">Medium priority</option>
+                  <option value="low">Low priority</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="table-scroll">
+              <table className="tickets-table">
+                <thead>
+                  <tr>
+                    <th className="id-column">ID</th>
+                    <th>Ticket</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th className="action-column">Update status</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={6} className="table-message">
+                        <RefreshCw size={20} className="spin" />
+                        Loading tickets...
+                      </td>
+                    </tr>
+                  ) : visibleTickets.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="table-message">
+                        <TicketIcon size={24} />
+                        <strong>No tickets found</strong>
+                        <span>Try changing your search or filters.</span>
+                      </td>
+                    </tr>
+                  ) : (
+                    visibleTickets.map((ticket) => (
+                      <tr key={ticket.id}>
+                        <td className="ticket-id-cell">#{ticket.id}</td>
+
+                        <td>
+                          <div className="table-ticket-title">
+                            <strong>{ticket.title}</strong>
+                            <span>
+                              {ticket.description || "No description provided"}
+                            </span>
+                          </div>
+                        </td>
+
+                        <td>
+                          <select
+                            className={`row-priority-select priority-${ticket.priority}`}
+                            value={ticket.priority}
+                            disabled={updatingId === ticket.id}
+                            aria-label={`Update priority for ticket ${ticket.id}`}
+                            onChange={(event) =>
+                              void handlePriorityChange(
+                                ticket.id,
+                                event.target.value as TicketPriority,
+                              )
+                            }
+                          >
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                          </select>
+
+                          {updatingId === ticket.id && (
+                            <span className="saving-text">Saving...</span>
+                          )}
+                        </td>
+
+                        <td>
+                          <span
+                            className={`status-badge status-badge-${ticket.status}`}
+                          >
+                            <span className="badge-dot" />
+                            {STATUS_LABELS[ticket.status]}
+                          </span>
+                        </td>
+
+                        <td className="date-cell">
+                          {formatDate(ticket.created_at)}
+                        </td>
+
+                        <td>
+                          <select
+                            className="row-status-select"
+                            value={ticket.status}
+                            disabled={updatingId === ticket.id}
+                            aria-label={`Update status for ticket ${ticket.id}`}
+                            onChange={(event) =>
+                              void handleStatusChange(
+                                ticket.id,
+                                event.target.value as TicketStatus,
+                              )
+                            }
+                          >
+                            {Object.entries(STATUS_LABELS).map(
+                              ([value, label]) => (
+                                <option key={value} value={value}>
+                                  {label}
+                                </option>
+                              ),
+                            )}
+                          </select>
+                          {updatingId === ticket.id && (
+                            <span className="saving-text">Saving...</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="table-footer">
+              <span>
+                Showing {firstItem}–{lastItem} of {totalTickets} tickets
+              </span>
+
+              <div className="pagination">
+                <button
+                  type="button"
+                  aria-label="Previous page"
+                  disabled={page <= 1 || loading}
+                  onClick={() => setPage((current) => current - 1)}
+                >
+                  <ChevronLeft size={17} />
+                </button>
+
+                <span>
+                  Page <strong>{page}</strong> of {totalPages}
+                </span>
+
+                <button
+                  type="button"
+                  aria-label="Next page"
+                  disabled={page >= totalPages || loading}
+                  onClick={() => setPage((current) => current + 1)}
+                >
+                  <ChevronRight size={17} />
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <footer className="dashboard-footer">
+            Mini Ticket Tracker <span>2026</span>
+          </footer>
+        </div>
+      </main>
+
+      {showCreateForm && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !creating) {
+              setShowCreateForm(false);
+            }
+          }}
+        >
+          <section
+            className="create-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-modal-title"
+          >
+            <div className="modal-heading">
+              <div>
+                <h2 id="create-modal-title">Create ticket</h2>
+                <p>Enter the details for the new support request.</p>
+              </div>
+
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="Close form"
+                disabled={creating}
+                onClick={() => setShowCreateForm(false)}
+              >
+                <X size={19} />
+              </button>
+            </div>
+
+            <form className="modal-form" onSubmit={handleCreate}>
+              <div className="form-field">
+                <label htmlFor="new-ticket-title">Title</label>
+                <input
+                  id="new-ticket-title"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="Enter a descriptive title"
+                  maxLength={255}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-field">
+                <label htmlFor="new-ticket-description">Description</label>
+                <textarea
+                  id="new-ticket-description"
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder="Describe the issue or request..."
+                  rows={5}
+                />
+              </div>
+
+              <div className="form-field">
+                <label htmlFor="new-ticket-priority">Priority</label>
+                <select
+                  id="new-ticket-priority"
+                  value={priority}
+                  onChange={(event) =>
+                    setPriority(event.target.value as TicketPriority)
+                  }
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={creating}
+                  onClick={() => setShowCreateForm(false)}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  className="create-button"
+                  type="submit"
+                  disabled={creating}
+                >
+                  <CirclePlus size={17} />
+                  {creating ? "Creating..." : "Create ticket"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+    </div>
   );
 }
 
