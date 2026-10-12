@@ -1,18 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import {
-  Activity,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   CirclePlus,
   ClipboardList,
-  LayoutDashboard,
-  LogOut,
   Menu,
   RefreshCw,
   Search,
-  Settings,
   Ticket as TicketIcon,
   X,
 } from "lucide-react";
@@ -35,7 +31,7 @@ import type {
 
 import "./App.css";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [5, 10, 25, 50] as const;
 
 const EMPTY_STATS: TicketStats = {
   open: 0,
@@ -74,11 +70,11 @@ function App() {
   const [stats, setStats] = useState<TicketStats>(EMPTY_STATS);
 
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalTickets, setTotalTickets] = useState(0);
 
   const [statusFilter, setStatusFilter] = useState<TicketStatus | "">("");
-  const [priorityFilter, setPriorityFilter] = useState<TicketPriority | "">("");
   const [search, setSearch] = useState("");
 
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -103,7 +99,7 @@ function App() {
       const [ticketResponse, statsResponse] = await Promise.all([
         getTickets({
           page,
-          limit: PAGE_SIZE,
+          limit,
           ...(statusFilter ? { status: statusFilter } : {}),
         }),
         getTicketStats(),
@@ -118,7 +114,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter]);
+  }, [page, limit, statusFilter]);
 
   useEffect(() => {
     void loadData();
@@ -127,19 +123,17 @@ function App() {
   const visibleTickets = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return tickets.filter((ticket) => {
-      const matchesSearch =
-        !query ||
+    if (!query) {
+      return tickets;
+    }
+
+    return tickets.filter(
+      (ticket) =>
         ticket.title.toLowerCase().includes(query) ||
         (ticket.description ?? "").toLowerCase().includes(query) ||
-        String(ticket.id).includes(query);
-
-      const matchesPriority =
-        !priorityFilter || ticket.priority === priorityFilter;
-
-      return matchesSearch && matchesPriority;
-    });
-  }, [tickets, search, priorityFilter]);
+        String(ticket.id).includes(query),
+    );
+  }, [tickets, search]);
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -167,13 +161,12 @@ function App() {
       setPriority("medium");
       setShowCreateForm(false);
       setSearch("");
-      setPriorityFilter("");
       setStatusFilter("");
       setPage(1);
       setSuccess("Ticket created successfully.");
 
       const [ticketResponse, statsResponse] = await Promise.all([
-        getTickets({ page: 1, limit: PAGE_SIZE }),
+        getTickets({ page: 1, limit }),
         getTicketStats(),
       ]);
 
@@ -228,13 +221,19 @@ function App() {
     setPage(1);
   };
 
+  const handleLimitChange = (value: string) => {
+    const nextLimit = Number(value) as (typeof PAGE_SIZE_OPTIONS)[number];
+    setLimit(nextLimit);
+    setPage(1);
+  };
+
   const handleRefresh = () => {
     void loadData();
   };
 
   const totalCount = stats.open + stats.in_progress + stats.closed;
-  const firstItem = totalTickets === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const lastItem = Math.min(page * PAGE_SIZE, totalTickets);
+  const firstItem = totalTickets === 0 ? 0 : (page - 1) * limit + 1;
+  const lastItem = Math.min(page * limit, totalTickets);
 
   return (
     <div className="dashboard">
@@ -243,7 +242,7 @@ function App() {
           <div className="brand-mark">
             <TicketIcon size={23} />
           </div>
-          <span>TrackDesk</span>
+          <span>Mini Ticket Tracker</span>
 
           <button
             className="sidebar-close"
@@ -255,22 +254,7 @@ function App() {
           </button>
         </div>
 
-        <div className="sidebar-section-label">WORKSPACE</div>
-
         <nav className="sidebar-nav">
-          <button
-            className="nav-item"
-            type="button"
-            onClick={() => {
-              setStatusFilter("");
-              setPage(1);
-              setMobileMenuOpen(false);
-            }}
-          >
-            <LayoutDashboard size={19} />
-            <span>Overview</span>
-          </button>
-
           <button
             className="nav-item active"
             type="button"
@@ -280,51 +264,7 @@ function App() {
             <span>Tickets</span>
             <span className="nav-count">{totalTickets}</span>
           </button>
-
-          <button
-            className="nav-item"
-            type="button"
-            onClick={() => {
-              setStatusFilter("open");
-              setPage(1);
-              setMobileMenuOpen(false);
-            }}
-          >
-            <Activity size={19} />
-            <span>Open tickets</span>
-          </button>
-
-          <button
-            className="nav-item"
-            type="button"
-            onClick={() => {
-              setStatusFilter("closed");
-              setPage(1);
-              setMobileMenuOpen(false);
-            }}
-          >
-            <CheckCircle2 size={19} />
-            <span>Resolved</span>
-          </button>
         </nav>
-
-        <div className="sidebar-bottom">
-          <div className="sidebar-section-label">PREFERENCES</div>
-
-          <button className="nav-item" type="button">
-            <Settings size={19} />
-            <span>Settings</span>
-          </button>
-
-          <div className="sidebar-profile">
-            <div className="profile-avatar">TD</div>
-            <div className="profile-info">
-              <strong>Support Team</strong>
-              <span>Ticket workspace</span>
-            </div>
-            <LogOut size={17} className="profile-logout" />
-          </div>
-        </div>
       </aside>
 
       {mobileMenuOpen && (
@@ -348,13 +288,13 @@ function App() {
           </button>
 
           <div className="breadcrumb">
-            Workspace <span>/</span> <strong>Tickets</strong>
+            Dashboard <span>/</span> <strong>Tickets</strong>
           </div>
 
           <div className="header-actions">
             <span className="system-status">
               <span className="status-dot" />
-              Ticket system
+              Tickets Tracker
             </span>
 
             <button
@@ -362,7 +302,7 @@ function App() {
               type="button"
               aria-label="Support team profile"
             >
-              TD
+              TT
             </button>
           </div>
         </header>
@@ -370,8 +310,7 @@ function App() {
         <div className="dashboard-content">
           <section className="page-title-row">
             <div>
-              <p className="eyebrow">SUPPORT WORKSPACE</p>
-              <h1>Tickets</h1>
+              <p className="eyebrow">TICKETS</p>
               <p className="page-subtitle">
                 Manage, prioritize, and track support requests.
               </p>
@@ -491,7 +430,7 @@ function App() {
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search by title, description or ID..."
-                  aria-label="Search tickets on current page"
+                  aria-label="Search tickets"
                 />
               </div>
 
@@ -508,16 +447,15 @@ function App() {
                 </select>
 
                 <select
-                  value={priorityFilter}
-                  onChange={(event) =>
-                    setPriorityFilter(event.target.value as TicketPriority | "")
-                  }
-                  aria-label="Filter by priority"
+                  value={limit}
+                  onChange={(event) => handleLimitChange(event.target.value)}
+                  aria-label="Number of records to show"
                 >
-                  <option value="">All priorities</option>
-                  <option value="high">High priority</option>
-                  <option value="medium">Medium priority</option>
-                  <option value="low">Low priority</option>
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size} per page
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
